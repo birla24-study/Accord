@@ -12,7 +12,7 @@ plugins {
 }
 
 android {
-    val releaseType = readProperties(file("../package.properties")).getProperty("releaseType")
+    val releaseType = readProperties(file("../package.properties")).getProperty("releaseType", "SelfBuilt") ?: "SelfBuilt"
     if (releaseType.contains("\"")) {
         throw IllegalArgumentException("releaseType must not contain \"")
     }
@@ -208,7 +208,9 @@ fun String.runCommand(
 }.standardOutput.asText.get().removeSuffixIfPresent("\n")
 
 fun readProperties(propertiesFile: File) = Properties().apply {
-    propertiesFile.inputStream().use { fis ->
-        load(fis)
+    if (propertiesFile.exists()) {
+        propertiesFile.inputStream().use { fis ->
+            load(fis)
+        }
     }
 }
