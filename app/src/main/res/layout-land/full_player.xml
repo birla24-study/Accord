@@ -233,6 +233,7 @@
             android:id="@+id/playlist_recyclerview"
             android:layout_width="match_parent"
             android:layout_height="0dp"
+            android:background="@android:color/transparent"
             android:scrollbars="none"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toBottomOf="@id/playlist_title" />
