@@ -127,6 +127,9 @@ import org.akanework.gramophone.logic.utils.DatabaseUtils
 import org.akanework.gramophone.logic.utils.LrcUtils
 import org.akanework.gramophone.logic.utils.MediaStoreUtils
 import org.akanework.gramophone.ui.MainActivity
+import org.akanework.gramophone.ui.fragments.ArtistSubFragment
+import org.akanework.gramophone.ui.fragments.BaseWrapperFragment
+import org.akanework.gramophone.ui.fragments.GeneralSubFragment
 import java.util.LinkedList
 import kotlin.math.abs
 import kotlin.math.absoluteValue
@@ -770,6 +773,78 @@ class FullBottomSheet @JvmOverloads constructor(
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
         }
 
+        val artistClickListener = OnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            val mediaItem = instance?.currentMediaItem ?: return@OnClickListener
+            val artist = mediaItem.mediaMetadata.artist?.toString()?.takeIf { a -> a.isNotBlank() }
+                ?: mediaItem.mediaMetadata.albumArtist?.toString()?.takeIf { a -> a.isNotBlank() }
+                ?: return@OnClickListener
+            CoroutineScope(Dispatchers.Default).launch {
+                val artistList = activity.libraryViewModel.artistItemList.value
+                var itemType = R.id.artist
+                var positionArtist = artistList?.indexOfFirst { a ->
+                    (a.title == artist) && (a.songList.any { s -> s.mediaId == mediaItem.mediaId } || a.songList.contains(mediaItem))
+                }?.takeIf { it != -1 } ?: artistList?.indexOfFirst { a -> a.title == artist }?.takeIf { it != -1 }
+
+                if (positionArtist == null) {
+                    val albumArtistList = activity.libraryViewModel.albumArtistItemList.value
+                    positionArtist = albumArtistList?.indexOfFirst { a ->
+                        (a.title == artist) && (a.songList.any { s -> s.mediaId == mediaItem.mediaId } || a.songList.contains(mediaItem))
+                    }?.takeIf { it != -1 } ?: albumArtistList?.indexOfFirst { a -> a.title == artist }?.takeIf { it != -1 }
+                    if (positionArtist != null) {
+                        itemType = R.id.album_artist
+                    }
+                }
+
+                if (positionArtist != null) {
+                    withContext(Dispatchers.Main) {
+                        val wrapper = getActiveBaseWrapperFragment()
+                        if (wrapper != null) {
+                            minimize?.invoke()
+                            wrapper.replaceFragment(ArtistSubFragment()) {
+                                putInt("Position", positionArtist)
+                                putInt("Item", itemType)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val albumClickListener = OnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            val mediaItem = instance?.currentMediaItem ?: return@OnClickListener
+            val albumTitle = mediaItem.mediaMetadata.albumTitle?.toString()?.takeIf { a -> a.isNotBlank() }
+                ?: return@OnClickListener
+            CoroutineScope(Dispatchers.Default).launch {
+                val albumList = activity.libraryViewModel.albumItemList.value
+                val positionAlbum = albumList?.indexOfFirst { a ->
+                    (a.title == albumTitle) && (a.songList.any { s -> s.mediaId == mediaItem.mediaId } || a.songList.contains(mediaItem))
+                }?.takeIf { it != -1 } ?: albumList?.indexOfFirst { a -> a.title == albumTitle }?.takeIf { it != -1 }
+
+                if (positionAlbum != null) {
+                    withContext(Dispatchers.Main) {
+                        val wrapper = getActiveBaseWrapperFragment()
+                        if (wrapper != null) {
+                            minimize?.invoke()
+                            wrapper.replaceFragment(GeneralSubFragment()) {
+                                putInt("Position", positionAlbum)
+                                putInt("Item", R.id.album)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        bottomSheetFullSubtitle.setOnClickListener(artistClickListener)
+        findViewById<View?>(R.id.desc_frame)?.setOnClickListener(artistClickListener)
+        bottomSheetFullPlaylistSubtitle.setOnClickListener(artistClickListener)
+        findViewById<View?>(R.id.playlist_desc_frame)?.setOnClickListener(artistClickListener)
+
+        bottomSheetFullCoverFrame.setOnClickListener(albumClickListener)
+        bottomSheetFullCover.setOnClickListener(albumClickListener)
+
         bottomSheetFullLyricRecyclerView.layoutManager = bottomSheetFullLyricLinearLayoutManager
         bottomSheetFullLyricRecyclerView.adapter = bottomSheetFullLyricAdapter
         bottomSheetFullLyricRecyclerView.addItemDecoration(LyricPaddingDecoration(context))
@@ -894,6 +969,21 @@ class FullBottomSheet @JvmOverloads constructor(
         view.getLocationInWindow(location)
 
         return windowHeight - (location[1] + view.height)
+    }
+
+    private fun getActiveBaseWrapperFragment(): BaseWrapperFragment? {
+        val viewPagerFragment = activity.supportFragmentManager.findFragmentById(R.id.container)
+            ?: return null
+        val currentPosition = when (activity.bottomNavigationView.selectedItemId) {
+            R.id.home -> 0
+            R.id.browse -> 1
+            R.id.library -> 2
+            R.id.search -> 3
+            else -> 0
+        }
+        return (viewPagerFragment.childFragmentManager.findFragmentByTag("f$currentPosition") as? BaseWrapperFragment)
+            ?: viewPagerFragment.childFragmentManager.fragments.filterIsInstance<BaseWrapperFragment>().firstOrNull { it.isResumed }
+            ?: viewPagerFragment.childFragmentManager.fragments.filterIsInstance<BaseWrapperFragment>().firstOrNull()
     }
 
     private fun hideControllerJob() {
