@@ -28,6 +28,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowManager
@@ -127,6 +128,7 @@ import org.akanework.gramophone.logic.utils.LrcUtils
 import org.akanework.gramophone.logic.utils.MediaStoreUtils
 import org.akanework.gramophone.ui.MainActivity
 import java.util.LinkedList
+import kotlin.math.abs
 import kotlin.math.absoluteValue
 
 @SuppressLint("SetTextI18n")
@@ -661,17 +663,15 @@ class FullBottomSheet @JvmOverloads constructor(
                     bottomSheetFadingVerticalEdgeLayout.paddingLeft,
                     bottomSheetFadingVerticalEdgeLayout.paddingTop,
                     bottomSheetFadingVerticalEdgeLayout.paddingRight,
-                    if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
-                        getDistanceToBottom(bottomSheetFullSlider)
-                    else
-                        0
+                    0
                 )
                 bottomSheetFadingVerticalEdgeLayout.fadInAnimation(
                     interpolator, VIEW_TRANSIT_DURATION
                 ) {
                     bottomSheetFadingVerticalEdgeLayout.changeOverlayVisibility(true)
                 }
-                hideControllerJob()
+                hideJob?.cancel()
+                hideEveryController(VIEW_TRANSIT_DURATION)
                 bottomSheetFullBlendView?.animateBlurRadius(false, VIEW_TRANSIT_DURATION)
             } else if (bottomSheetPlaylistButton.isChecked) {
                 activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -682,17 +682,15 @@ class FullBottomSheet @JvmOverloads constructor(
                     bottomSheetFadingVerticalEdgeLayout.paddingLeft,
                     bottomSheetFadingVerticalEdgeLayout.paddingTop,
                     bottomSheetFadingVerticalEdgeLayout.paddingRight,
-                    if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
-                        getDistanceToBottom(bottomSheetFullSlider)
-                    else
-                        0
+                    0
                 )
                 bottomSheetFadingVerticalEdgeLayout.fadInAnimation(
                     interpolator, VIEW_TRANSIT_DURATION
                 ) {
                     bottomSheetFadingVerticalEdgeLayout.changeOverlayVisibility(true)
                 }
-                hideControllerJob()
+                hideJob?.cancel()
+                hideEveryController(VIEW_TRANSIT_DURATION)
             } else {
                 activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 changeMovableFrame(true)
@@ -707,7 +705,7 @@ class FullBottomSheet @JvmOverloads constructor(
 
                 hideJob?.cancel()
                 if (bottomSheetFullControllerButton.isGone || bottomSheetFullControllerButton.isInvisible) {
-                    showEveryController()
+                    showEveryController(VIEW_TRANSIT_DURATION)
                 }
                 bottomSheetFullBlendView?.animateBlurRadius(true, VIEW_TRANSIT_DURATION)
             }
@@ -784,40 +782,9 @@ class FullBottomSheet @JvmOverloads constructor(
                 when (e.action) {
                     MotionEvent.ACTION_DOWN -> {
                         startY = e.y
-                        if (!animationBroadcastLock && e.y >= rv.measuredHeight / 4 * 3 &&
-                            bottomSheetFullControllerButton.visibility != VISIBLE
-                        ) {
-                            // Down
-                            animationBroadcastLock = true
-                            showEveryController()
-                            val animator = ValueAnimator.ofInt(
-                                0,
-                                if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
-                                    getDistanceToBottom(bottomSheetFullSlider)
-                                else
-                                    0
-                            )
-                            animator.addUpdateListener {
-                                val value = it.animatedValue as Int
-                                bottomSheetFadingVerticalEdgeLayout.setPadding(
-                                    bottomSheetFadingVerticalEdgeLayout.paddingLeft,
-                                    bottomSheetFadingVerticalEdgeLayout.paddingTop,
-                                    bottomSheetFadingVerticalEdgeLayout.paddingRight,
-                                    value
-                                )
-                            }
-                            animator.doOnEnd {
-                                animationBroadcastLock = false
-                            }
-                            animator.duration = BOTTOM_TRANSIT_DURATION
-                            animator.start()
-                            hideControllerJob()
-                            return true
-                        } else {
-                            isFingerOnScreen = true
-                            blurLock = true
-                            clearBlur()
-                        }
+                        isFingerOnScreen = true
+                        blurLock = true
+                        clearBlur()
                     }
 
                     MotionEvent.ACTION_UP -> {
@@ -829,55 +796,59 @@ class FullBottomSheet @JvmOverloads constructor(
 
                     MotionEvent.ACTION_MOVE -> {
                         val currentY = e.y
-                        isScrollingDown = currentY < startY
-                        if (!animationBroadcastLock && !isScrollingDown && bottomSheetFullControllerButton.visibility != VISIBLE) {
-                            // Down
-                            animationBroadcastLock = true
-                            showEveryController()
-                            val animator = ValueAnimator.ofInt(
-                                0,
-                                if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
-                                    getDistanceToBottom(bottomSheetFullSlider)
-                                else
-                                    0
-                            )
-                            animator.addUpdateListener {
-                                val value = it.animatedValue as Int
-                                bottomSheetFadingVerticalEdgeLayout.setPadding(
-                                    bottomSheetFadingVerticalEdgeLayout.paddingLeft,
-                                    bottomSheetFadingVerticalEdgeLayout.paddingTop,
-                                    bottomSheetFadingVerticalEdgeLayout.paddingRight,
-                                    value
+                        val diffY = currentY - startY
+                        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+                        if (abs(diffY) > touchSlop) {
+                            isScrollingDown = diffY < 0
+                            if (!animationBroadcastLock && !isScrollingDown && bottomSheetFullControllerButton.visibility != VISIBLE) {
+                                // Down
+                                animationBroadcastLock = true
+                                showEveryController()
+                                val animator = ValueAnimator.ofInt(
+                                    0,
+                                    if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
+                                        getDistanceToBottom(bottomSheetFullSlider)
+                                    else
+                                        0
                                 )
-                            }
-                            animator.doOnEnd {
-                                animationBroadcastLock = false
-                            }
-                            animator.duration = BOTTOM_TRANSIT_DURATION
-                            animator.start()
-                            hideControllerJob()
-                        } else if (!animationBroadcastLock && isScrollingDown) {
-                            animationBroadcastLock = true
-                            hideJob?.cancel()
-                            // Up
-                            hideEveryController()
-                            val animator = ValueAnimator.ofInt(
-                                bottomSheetFadingVerticalEdgeLayout.paddingBottom, 0
-                            )
-                            animator.addUpdateListener {
-                                val value = it.animatedValue as Int
-                                bottomSheetFadingVerticalEdgeLayout.setPadding(
-                                    bottomSheetFadingVerticalEdgeLayout.paddingLeft,
-                                    bottomSheetFadingVerticalEdgeLayout.paddingTop,
-                                    bottomSheetFadingVerticalEdgeLayout.paddingRight,
-                                    value
+                                animator.addUpdateListener {
+                                    val value = it.animatedValue as Int
+                                    bottomSheetFadingVerticalEdgeLayout.setPadding(
+                                        bottomSheetFadingVerticalEdgeLayout.paddingLeft,
+                                        bottomSheetFadingVerticalEdgeLayout.paddingTop,
+                                        bottomSheetFadingVerticalEdgeLayout.paddingRight,
+                                        value
+                                    )
+                                }
+                                animator.doOnEnd {
+                                    animationBroadcastLock = false
+                                }
+                                animator.duration = BOTTOM_TRANSIT_DURATION
+                                animator.start()
+                                hideControllerJob()
+                            } else if (!animationBroadcastLock && isScrollingDown) {
+                                animationBroadcastLock = true
+                                hideJob?.cancel()
+                                // Up
+                                hideEveryController()
+                                val animator = ValueAnimator.ofInt(
+                                    bottomSheetFadingVerticalEdgeLayout.paddingBottom, 0
                                 )
+                                animator.addUpdateListener {
+                                    val value = it.animatedValue as Int
+                                    bottomSheetFadingVerticalEdgeLayout.setPadding(
+                                        bottomSheetFadingVerticalEdgeLayout.paddingLeft,
+                                        bottomSheetFadingVerticalEdgeLayout.paddingTop,
+                                        bottomSheetFadingVerticalEdgeLayout.paddingRight,
+                                        value
+                                    )
+                                }
+                                animator.doOnEnd {
+                                    animationBroadcastLock = false
+                                }
+                                animator.duration = BOTTOM_TRANSIT_DURATION
+                                animator.start()
                             }
-                            animator.doOnEnd {
-                                animationBroadcastLock = false
-                            }
-                            animator.duration = BOTTOM_TRANSIT_DURATION
-                            animator.start()
                         }
                     }
                 }
@@ -933,8 +904,8 @@ class FullBottomSheet @JvmOverloads constructor(
         hideJob = CoroutineScope(Dispatchers.Default)
         hideJob!!.launch {
             delay(5000)
-            hideEveryController()
             withContext(Dispatchers.Main) {
+                hideEveryController()
                 val animator = ValueAnimator.ofInt(
                     bottomSheetFadingVerticalEdgeLayout.paddingBottom, 0
                 )
@@ -967,25 +938,25 @@ class FullBottomSheet @JvmOverloads constructor(
         }
     }
 
-    private fun hideEveryController() {
+    private fun hideEveryController(duration: Long = BOTTOM_TRANSIT_DURATION) {
         manipulateBottomOverlayVisibility(INVISIBLE)
-        bottomSheetFullControllerFrame.fadOutAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetFullControllerButton.fadOutAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetVolumeSliderFrame.fadOutAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetFullNextButton.fadOutAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetFullPreviousButton.fadOutAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetActionBar.fadOutAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
+        bottomSheetFullControllerFrame.fadOutAnimation(interpolator, duration)
+        bottomSheetFullControllerButton.fadOutAnimation(interpolator, duration)
+        bottomSheetVolumeSliderFrame.fadOutAnimation(interpolator, duration)
+        bottomSheetFullNextButton.fadOutAnimation(interpolator, duration)
+        bottomSheetFullPreviousButton.fadOutAnimation(interpolator, duration)
+        bottomSheetActionBar.fadOutAnimation(interpolator, duration)
     }
 
-    private fun showEveryController() {
-        bottomSheetFullControllerFrame.fadInAnimation(interpolator, BOTTOM_TRANSIT_DURATION) {
+    private fun showEveryController(duration: Long = BOTTOM_TRANSIT_DURATION) {
+        bottomSheetFullControllerFrame.fadInAnimation(interpolator, duration) {
             manipulateBottomOverlayVisibility(VISIBLE)
         }
-        bottomSheetFullControllerButton.fadInAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetVolumeSliderFrame.fadInAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetFullNextButton.fadInAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetFullPreviousButton.fadInAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
-        bottomSheetActionBar.fadInAnimation(interpolator, BOTTOM_TRANSIT_DURATION)
+        bottomSheetFullControllerButton.fadInAnimation(interpolator, duration)
+        bottomSheetVolumeSliderFrame.fadInAnimation(interpolator, duration)
+        bottomSheetFullNextButton.fadInAnimation(interpolator, duration)
+        bottomSheetFullPreviousButton.fadInAnimation(interpolator, duration)
+        bottomSheetActionBar.fadInAnimation(interpolator, duration)
     }
 
     private fun isHires(boolean: Boolean) {
