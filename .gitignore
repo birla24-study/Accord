@@ -9,3 +9,5 @@
 .cxx
 .okf/
 okf_bundle/
+*.keystore
+*.jks
