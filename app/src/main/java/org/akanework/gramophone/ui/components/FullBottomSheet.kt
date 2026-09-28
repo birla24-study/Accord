@@ -318,7 +318,6 @@ class FullBottomSheet @JvmOverloads constructor(
     private val bottomSheetStarButtonBackground: ImageView
     private val bottomSheetStarButtonPlaylist: MaterialButton
     private val bottomSheetStarButtonPlaylistBackground: ImageView
-    private val bottomSheetMoreButtonPlaylistBackground: ImageView
     private val bottomSheetActionBar: LinearLayout
     private val bottomSheetFadingVerticalEdgeLayout: FadingVerticalEdgeLayout
     private var playlistNowPlaying: TextView? = null
@@ -395,7 +394,6 @@ class FullBottomSheet @JvmOverloads constructor(
         bottomSheetStarButtonBackground = findViewById(R.id.star_bg)
         bottomSheetStarButtonPlaylist = findViewById(R.id.star_btn_playlist)
         bottomSheetStarButtonPlaylistBackground = findViewById(R.id.star_btn_playlist_bg)
-        bottomSheetMoreButtonPlaylistBackground = findViewById(R.id.more_btn_playlist_bg)
         bottomSheetInfinityButton = findViewById(R.id.sheet_infinity)
         bottomSheetActionBar = findViewById(R.id.actionBar)
         bottomSheetQualityOverlay = findViewById(R.id.quality_overlay)
@@ -425,7 +423,6 @@ class FullBottomSheet @JvmOverloads constructor(
         bottomSheetVolumeEndOverlayImageView.setLayerType(LAYER_TYPE_HARDWARE, overlayPaint)
         bottomSheetStarButtonBackground.setLayerType(LAYER_TYPE_HARDWARE, overlayPaint)
         bottomSheetStarButtonPlaylistBackground.setLayerType(LAYER_TYPE_HARDWARE, overlayPaint)
-        bottomSheetMoreButtonPlaylistBackground.setLayerType(LAYER_TYPE_HARDWARE, overlayPaint)
         bottomSheetFullLyricButtonUnder.setLayerType(LAYER_TYPE_HARDWARE, overlayPaint)
         bottomSheetPlaylistButtonUnder.setLayerType(LAYER_TYPE_HARDWARE, overlayPaint)
 
@@ -2536,7 +2533,6 @@ class FullBottomSheet @JvmOverloads constructor(
         bottomSheetStarButtonBackground.visibility = visibility
         bottomSheetFullPlaylistSubtitleUnder.setTextColor(targetColorPrimary)
         bottomSheetStarButtonPlaylistBackground.visibility = visibility
-        bottomSheetMoreButtonPlaylistBackground.visibility = visibility
     }
 
     private fun manipulateBottomOverlayVisibility(visibility: Int) {
