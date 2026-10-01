@@ -122,6 +122,7 @@ import org.akanework.gramophone.logic.setTimer
 import org.akanework.gramophone.logic.ui.CustomSmoothScroller
 import org.akanework.gramophone.logic.ui.coolCrossfade
 import org.akanework.gramophone.logic.updateMargin
+import org.akanework.gramophone.logic.utils.ArtistUtils
 import org.akanework.gramophone.logic.utils.CalculationUtils
 import org.akanework.gramophone.logic.utils.DatabaseUtils
 import org.akanework.gramophone.logic.utils.LrcUtils
@@ -776,34 +777,25 @@ class FullBottomSheet @JvmOverloads constructor(
         val artistClickListener = OnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             val mediaItem = instance?.currentMediaItem ?: return@OnClickListener
-            val artist = mediaItem.mediaMetadata.artist?.toString()?.takeIf { a -> a.isNotBlank() }
+            val rawArtist = mediaItem.mediaMetadata.artist?.toString()?.takeIf { a -> a.isNotBlank() }
                 ?: mediaItem.mediaMetadata.albumArtist?.toString()?.takeIf { a -> a.isNotBlank() }
                 ?: return@OnClickListener
             CoroutineScope(Dispatchers.Default).launch {
-                val artistList = activity.libraryViewModel.artistItemList.value
-                var itemType = R.id.artist
-                var positionArtist = artistList?.indexOfFirst { a ->
-                    (a.title == artist) && (a.songList.any { s -> s.mediaId == mediaItem.mediaId } || a.songList.contains(mediaItem))
-                }?.takeIf { it != -1 } ?: artistList?.indexOfFirst { a -> a.title == artist }?.takeIf { it != -1 }
+                val match = ArtistUtils.findArtistPosition(
+                    activity.libraryViewModel.artistItemList.value,
+                    activity.libraryViewModel.albumArtistItemList.value,
+                    rawArtist,
+                    mediaItem
+                )
 
-                if (positionArtist == null) {
-                    val albumArtistList = activity.libraryViewModel.albumArtistItemList.value
-                    positionArtist = albumArtistList?.indexOfFirst { a ->
-                        (a.title == artist) && (a.songList.any { s -> s.mediaId == mediaItem.mediaId } || a.songList.contains(mediaItem))
-                    }?.takeIf { it != -1 } ?: albumArtistList?.indexOfFirst { a -> a.title == artist }?.takeIf { it != -1 }
-                    if (positionArtist != null) {
-                        itemType = R.id.album_artist
-                    }
-                }
-
-                if (positionArtist != null) {
+                if (match != null) {
                     withContext(Dispatchers.Main) {
                         val wrapper = getActiveBaseWrapperFragment()
                         if (wrapper != null) {
                             minimize?.invoke()
                             wrapper.replaceFragment(ArtistSubFragment()) {
-                                putInt("Position", positionArtist)
-                                putInt("Item", itemType)
+                                putInt("Position", match.first)
+                                putInt("Item", match.second)
                             }
                         }
                     }

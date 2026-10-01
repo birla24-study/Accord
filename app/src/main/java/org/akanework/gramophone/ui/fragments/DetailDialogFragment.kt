@@ -16,6 +16,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.enableEdgeToEdgePaddingListener
 import org.akanework.gramophone.logic.getFile
+import org.akanework.gramophone.logic.utils.ArtistUtils
 import org.akanework.gramophone.logic.utils.CalculationUtils.convertDurationToTimeStamp
 import org.akanework.gramophone.ui.LibraryViewModel
 
@@ -56,6 +57,26 @@ class DetailDialogFragment : BaseFragment(true) {
         }
         titleTextView.text = mediaMetadata.title
         artistTextView.text = mediaMetadata.artist
+        artistTextView.setOnClickListener {
+            val rawArtist = mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+                ?: mediaMetadata.albumArtist?.toString()?.takeIf { it.isNotBlank() }
+                ?: return@setOnClickListener
+            val match = ArtistUtils.findArtistPosition(
+                libraryViewModel.artistItemList.value,
+                libraryViewModel.albumArtistItemList.value,
+                rawArtist,
+                mediaItem
+            )
+            if (match != null) {
+                (requireParentFragment() as BaseWrapperFragment).apply {
+                    childFragmentManager.popBackStack()
+                    replaceFragment(ArtistSubFragment()) {
+                        putInt("Position", match.first)
+                        putInt("Item", match.second)
+                    }
+                }
+            }
+        }
         albumTextView.text = mediaMetadata.albumTitle
         if (mediaMetadata.albumArtist != null) {
             albumArtistTextView.text = mediaMetadata.albumArtist

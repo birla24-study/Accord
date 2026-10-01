@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.findBaseWrapperFragment
+import org.akanework.gramophone.logic.utils.ArtistUtils
 import org.akanework.gramophone.ui.LibraryViewModel
 import org.akanework.gramophone.ui.fragments.ArtistSubFragment
 import org.akanework.gramophone.ui.fragments.DetailDialogFragment
@@ -149,19 +150,18 @@ class SongAdapter(
 
                 R.id.artist -> {
                     CoroutineScope(Dispatchers.Default).launch {
-                        val positionArtist =
-                            viewModel.artistItemList.value?.indexOfFirst {
-                                val isMatching =
-                                    (it.title == item.mediaMetadata.artist) &&
-                                            (it.songList.contains(item))
-                                isMatching
-                            }
-                        if (positionArtist != null) {
+                        val match = ArtistUtils.findArtistPosition(
+                            viewModel.artistItemList.value,
+                            viewModel.albumArtistItemList.value,
+                            item.mediaMetadata.artist?.toString() ?: item.mediaMetadata.albumArtist?.toString(),
+                            item
+                        )
+                        if (match != null) {
                             withContext(Dispatchers.Main) {
                                 fragment!!.findBaseWrapperFragment()!!
                                     .replaceFragment(ArtistSubFragment()) {
-                                        putInt("Position", positionArtist)
-                                        putInt("Item", R.id.artist)
+                                        putInt("Position", match.first)
+                                        putInt("Item", match.second)
                                     }
                             }
                         }

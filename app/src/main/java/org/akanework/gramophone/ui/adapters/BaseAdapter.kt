@@ -538,7 +538,7 @@ abstract class BaseAdapter<T>(
         )
     ) : Sorter.Helper<T>(typesSupported) {
         override fun getId(item: T): String {
-            return item.id.toString()
+            return item.id?.toString() ?: item.title ?: ""
         }
 
         override fun getTitle(item: T): String? {

@@ -100,7 +100,7 @@ object MediaStoreUtils {
      * [Artist] stores Artist metadata.
      */
     data class Artist(
-        override val id: Long?,
+        override var id: Long?,
         override val title: String?,
         override val songList: MutableList<MediaItem>,
         val albumList: MutableList<Album>,
@@ -328,9 +328,9 @@ object MediaStoreUtils {
         val shallowRoot = FileNode("shallow")
         val songs = mutableListOf<MediaItem>()
         val albumMap = hashMapOf<Long?, AlbumImpl>()
-        val artistMap = hashMapOf<Long?, Artist>()
+        val artistMap = linkedMapOf<String?, Artist>()
         val artistCacheMap = hashMapOf<String?, Long?>()
-        val albumArtistMap = hashMapOf<String?, Pair<MutableList<Album>, MutableList<MediaItem>>>()
+        val albumArtistMap = linkedMapOf<String?, Pair<MutableList<Album>, MutableList<MediaItem>>>()
         // Note: it has been observed on a user's Pixel(!) that MediaStore assigned 3 different IDs
         // for "Unknown genre" (null genre tag), hence we practically ignore genre IDs as key
         val genreMap = hashMapOf<String?, Genre>()
@@ -564,17 +564,28 @@ object MediaStoreUtils {
                 if (addDate != null) {
                     recentlyAddedMap.add(Pair(addDate, song))
                 }
-                artistMap.getOrPut(artistId) {
-                    Artist(artistId, artist, mutableListOf(), mutableListOf())
-                }.songList.add(song)
-                artistCacheMap.putIfAbsentSupport(artist, artistId)
-                albumMap.getOrPut(albumId) {
+                val artistNames = ArtistUtils.splitArtistNames(artist).ifEmpty { listOf(artist) }
+                for (artName in artistNames) {
+                    val artistObj = artistMap.getOrPut(artName) {
+                        val id = if (artName == artist && artistId != null) artistId else
+                            (artistCacheMap[artName] ?: (artName?.hashCode()?.toLong()?.let { if (it == 0L) 1L else it }))
+                        Artist(id, artName, mutableListOf(), mutableListOf())
+                    }
+                    if (!artistObj.songList.contains(song)) {
+                        artistObj.songList.add(song)
+                    }
+                    if (artName != null && artistId != null && (artistNames.size == 1 || artName == artist)) {
+                        artistCacheMap.putIfAbsentSupport(artName, artistId)
+                        artistObj.id = artistId
+                    }
+                }
+                val artistStr = albumArtist ?: artist
+                val likelyArtist = albumIdToArtistMap?.get(albumId)
+                    ?.run { if (second == artistStr) this else null }
+                val alb = albumMap.getOrPut(albumId) {
                     // in haveImgPerm case, cover uri is created later using coverCache
                     val cover = if (haveImgPerm || albumId == null) null else
                         ContentUris.withAppendedId(coverUri, albumId)
-                    val artistStr = albumArtist ?: artist
-                    val likelyArtist = albumIdToArtistMap?.get(albumId)
-                        ?.run { if (second == artistStr) this else null }
                     AlbumImpl(
                         albumId,
                         album,
@@ -583,20 +594,28 @@ object MediaStoreUtils {
                         year,
                         cover,
                         mutableListOf()
-                    ).also { alb ->
-                        albumArtistMap.getOrPut(artistStr) {
-                            Pair(
-                                mutableListOf(),
-                                mutableListOf()
-                            )
+                    )
+                }
+                alb.songList.add(song)
+                for (artName in artistNames) {
+                    artistMap[artName]?.let { artObj ->
+                        if (!artObj.albumList.contains(alb)) {
+                            artObj.albumList.add(alb)
                         }
-                            .first.add(alb)
                     }
-                }.also { alb ->
-                    albumArtistMap.getOrPut(alb.artist) {
+                }
+                val albArtistNames = ArtistUtils.splitArtistNames(artistStr).ifEmpty { listOf(artistStr) }
+                for (albArtName in albArtistNames) {
+                    val pair = albumArtistMap.getOrPut(albArtName) {
                         Pair(mutableListOf(), mutableListOf())
-                    }.second.add(song)
-                }.songList.add(song)
+                    }
+                    if (!pair.first.contains(alb)) {
+                        pair.first.add(alb)
+                    }
+                    if (!pair.second.contains(song)) {
+                        pair.second.add(song)
+                    }
+                }
                 genreMap.getOrPut(genre) { Genre(genreId, genre, mutableListOf()) }.songList.add(
                     song
                 )
@@ -619,15 +638,24 @@ object MediaStoreUtils {
 
         // Parse all the lists.
         val allowedCoverExtensions = listOf("jpg", "png", "jpeg", "bmp", "tiff", "tif", "webp")
-        val albumList = albumMap.values.onEach {
-            if (it.artistId == null) {
-                it.artistId = artistCacheMap[it.artist]
+        val albumList = albumMap.values.onEach { alb ->
+            if (alb.artistId == null) {
+                val first = ArtistUtils.getFirstArtistName(alb.artist)
+                alb.artistId = artistCacheMap[alb.artist] ?: artistCacheMap[first]
+                    ?: first?.hashCode()?.toLong()
             }
-            artistMap[it.artistId]?.albumList?.add(it)
+            val albArtists = ArtistUtils.splitArtistNames(alb.artist).ifEmpty { listOf(alb.artist) }
+            for (albArt in albArtists) {
+                artistMap[albArt]?.let { art ->
+                    if (!art.albumList.contains(alb)) {
+                        art.albumList.add(alb)
+                    }
+                }
+            }
             // coverCache == null if !haveImgPerm
-            coverCache?.get(it.id)?.let { p ->
+            coverCache?.get(alb.id)?.let { p ->
                 // if this is false, folder contains >1 albums
-                if (p.second.albumId == it.id) {
+                if (p.second.albumId == alb.id) {
                     var bestScore = 0
                     var bestFile: File? = null
                     try {
@@ -658,14 +686,15 @@ object MediaStoreUtils {
                     // allow .jpg or .png files with any name, but only permit more exotic
                     // formats if name contains either cover or albumart
                     if (bestScore >= 3) {
-                        bestFile?.let { f -> it.cover = f.toUri() }
+                        bestFile?.let { f -> alb.cover = f.toUri() }
                     }
                 }
             }
         }.toMutableList<Album>()
         val artistList = artistMap.values.toMutableList()
         val albumArtistList = albumArtistMap.entries.map { (artist, albumsAndSongs) ->
-            Artist(artistCacheMap[artist], artist, albumsAndSongs.second, albumsAndSongs.first)
+            val id = artistCacheMap[artist] ?: (artist?.hashCode()?.toLong()?.let { if (it == 0L) 1L else it })
+            Artist(id, artist, albumsAndSongs.second, albumsAndSongs.first)
         }.toMutableList()
         val genreList = genreMap.values.toMutableList()
         val dateList = dateMap.values.toMutableList()
